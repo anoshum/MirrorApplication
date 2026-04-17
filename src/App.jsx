@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Settings, RefreshCcw, HelpCircle, Zap, Move, Search, Maximize, MousePointer2, Info, Eye, EyeOff, Grab, Smartphone, Maximize2 } from 'lucide-react';
+import { Settings, RefreshCcw, HelpCircle, Zap, Move, Search, Maximize, MousePointer2, Info, Eye, EyeOff, Grab, Smartphone, Maximize2, Sun, Moon } from 'lucide-react';
 
 const App = () => {
   const [windowSize, setWindowSize] = useState({
@@ -17,6 +17,7 @@ const App = () => {
   const BASE_PX_PER_CM = isMobile ? 3.5 : 6; 
 
   // --- State ---
+  const [theme, setTheme] = useState('dark'); // 'dark' | 'light'
   const [mirrorType, setMirrorType] = useState('concave'); 
   const [u_cm, setU] = useState(60); 
   const [f_cm, setF] = useState(30); 
@@ -44,6 +45,16 @@ const App = () => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
 
+  // --- Theme Colors ---
+  const colors = useMemo(() => ({
+    bg: theme === 'dark' ? '#020617' : '#f8fafc',
+    grid: theme === 'dark' ? '#0f172a' : '#e2e8f0',
+    axis: theme === 'dark' ? '#1e293b' : '#cbd5e1',
+    text: theme === 'dark' ? '#f1f5f9' : '#0f172a',
+    mirrorBack: theme === 'dark' ? '#1e293b' : '#94a3b8',
+    hatch: theme === 'dark' ? '#334155' : '#cbd5e1',
+  }), [theme]);
+
   // --- Full Screen Logic ---
   const toggleFullScreen = () => {
     if (!document.fullscreenElement) {
@@ -58,7 +69,6 @@ const App = () => {
 
   const physics = useMemo(() => {
     const signedU = -u_cm;
-    // Cartesian: Concave f is negative (left), Convex f is positive (right)
     const signedF = mirrorType === 'concave' ? -f_cm : f_cm;
     const signedV = (signedU * signedF) / (signedU - signedF);
     const magnification = -signedV / signedU;
@@ -77,7 +87,7 @@ const App = () => {
   }, [u_cm, f_cm, mirrorType, objHeight_cm]);
 
   const getCenters = (width, height) => {
-    const defaultCenterX = isMobile ? width * 0.75 : width / 2 + 150; 
+    const defaultCenterX = isMobile ? width * 0.8 : width / 2 + 150; 
     const defaultCenterY = height / 2;
     return { 
       centerX: defaultCenterX + panOffset.x, 
@@ -85,11 +95,7 @@ const App = () => {
     };
   };
 
-  // --- Circle Intersection Math ---
   const getMirrorIntersection = (x1, y1, x2, y2, centerX, centerY, radius, isConcave) => {
-    // Corrected geometry logic:
-    // Concave: Center is at centerX - radius (to the left of Pole)
-    // Convex: Center is at centerX + radius (to the right of Pole)
     const circleX = isConcave ? centerX - radius : centerX + radius;
     const dx = x2 - x1;
     const dy = y2 - y1;
@@ -102,11 +108,10 @@ const App = () => {
     const t2 = (-B - Math.sqrt(det)) / (2 * A);
     const p1 = { x: x1 + t1 * dx, y: y1 + t1 * dy };
     const p2 = { x: x1 + t2 * dx, y: y1 + t2 * dy };
-    // We want the point closest to the Pole (centerX)
     return Math.abs(p1.x - centerX) < Math.abs(p2.x - centerX) ? p1 : p2;
   };
 
-  // --- INTERACTION HANDLERS ---
+  // --- Interaction Handlers ---
   const handlePointerDown = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -221,7 +226,7 @@ const App = () => {
     ctx.clearRect(0, 0, width, height);
 
     // 1. Grid
-    ctx.strokeStyle = '#0f172a';
+    ctx.strokeStyle = colors.grid;
     ctx.lineWidth = 1;
     const gridStep = 50 * zoom;
     const startX = (panOffset.x % gridStep);
@@ -234,22 +239,18 @@ const App = () => {
     }
 
     // 2. Axis
-    ctx.strokeStyle = '#1e293b';
+    ctx.strokeStyle = colors.axis;
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(0, centerY); ctx.lineTo(width, centerY); ctx.stroke();
 
     // 3. Mirror Construction
     const angleRange = 0.55;
     ctx.save();
-    // Orientation Fixed: 
-    // Concave should curve around the object (opening left).
-    // Convex should curve away from the object (opening right).
     if (mirrorType === 'concave') {
-      const mCX = centerX - radiusPx; // Center is left of pole
-      ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 8;
-      // Arc on the RIGHT of the center point is Concave if object is LEFT
+      const mCX = centerX - radiusPx; 
+      ctx.strokeStyle = colors.mirrorBack; ctx.lineWidth = 8;
       ctx.beginPath(); ctx.arc(mCX, centerY, radiusPx + 2, -angleRange, angleRange); ctx.stroke();
-      ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
+      ctx.strokeStyle = colors.hatch; ctx.lineWidth = 1;
       for (let a = -angleRange; a <= angleRange; a += 0.04) {
         const xs = mCX + radiusPx * Math.cos(a); const ys = centerY + radiusPx * Math.sin(a);
         ctx.beginPath(); ctx.moveTo(xs, ys); ctx.lineTo(xs + 6, ys + 6); ctx.stroke();
@@ -259,11 +260,10 @@ const App = () => {
       ctx.beginPath(); ctx.arc(mCX, centerY, radiusPx, -angleRange, angleRange);
       ctx.strokeStyle = grad; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.stroke();
     } else {
-      const mCX = centerX + radiusPx; // Center is right of pole
-      ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 8;
-      // Arc on the LEFT of the center point is Convex if object is LEFT
+      const mCX = centerX + radiusPx; 
+      ctx.strokeStyle = colors.mirrorBack; ctx.lineWidth = 8;
       ctx.beginPath(); ctx.arc(mCX, centerY, radiusPx - 2, Math.PI - angleRange, Math.PI + angleRange); ctx.stroke();
-      ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
+      ctx.strokeStyle = colors.hatch; ctx.lineWidth = 1;
       for (let a = Math.PI - angleRange; a <= Math.PI + angleRange; a += 0.04) {
         const xs = mCX + radiusPx * Math.cos(a); const ys = centerY + radiusPx * Math.sin(a);
         ctx.beginPath(); ctx.moveTo(xs, ys); ctx.lineTo(xs - 6, ys + 6); ctx.stroke();
@@ -278,9 +278,11 @@ const App = () => {
     // 4. Points
     const drawP = (x, label, color) => {
       ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, centerY, 4, 0, 7); ctx.fill();
-      ctx.font = 'bold 11px Inter'; ctx.fillText(label, x - 5, centerY + 22);
+      ctx.font = 'bold 11px Inter';
+      ctx.fillStyle = colors.text;
+      ctx.fillText(label, x - 5, centerY + 22);
     };
-    drawP(centerX, 'P', '#fff');
+    drawP(centerX, 'P', '#64748b');
     drawP(centerX + toPx(f), 'F', '#fbbf24');
     drawP(centerX + toPx(c), 'C', '#f97316');
 
@@ -315,7 +317,6 @@ const App = () => {
         }
       };
 
-      // Intersection logic adjusted for new mirror orientations
       const hit1 = getMirrorIntersection(objX, objY, centerX + (isConcave ? 200 : -200), objY, centerX, centerY, radiusPx, isConcave);
       drawRayPath(objX, objY, hit1.x, hit1.y, imgX, imgY, '#22c55e', visibleRays.parallel);
       
@@ -327,12 +328,11 @@ const App = () => {
       const hit3 = getMirrorIntersection(objX, objY, cX, centerY, centerX, centerY, radiusPx, isConcave);
       drawRayPath(objX, objY, hit3.x, hit3.y, imgX, imgY, '#f97316', visibleRays.center);
       
-      // Ray hitting exactly at the pole
       drawRayPath(objX, objY, centerX, centerY, imgX, imgY, '#ec4899', visibleRays.pole);
 
       drawArrow(ctx, imgX, centerY, imgX, imgY, '#a855f7', `Image (${Math.abs(v).toFixed(1)}cm)`);
     }
-  }, [physics, mirrorType, u_cm, f_cm, objHeight_cm, pxPerCm, zoom, isDraggingObject, isPanning, panOffset, visibleRays]);
+  }, [physics, mirrorType, u_cm, f_cm, objHeight_cm, pxPerCm, zoom, isDraggingObject, isPanning, panOffset, visibleRays, colors]);
 
   const drawDirArrow = (ctx, x1, y1, x2, y2) => {
     const mx = (x1 + x2) / 2; const my = (y1 + y2) / 2;
@@ -354,53 +354,65 @@ const App = () => {
     ctx.fillText(label, x2 - 30, y2 < y1 ? y2 - 15 : y2 + 25);
   };
 
+  const navThemeClass = theme === 'dark' ? 'bg-slate-900 border-white/5' : 'bg-white border-slate-200';
+  const sidebarThemeClass = theme === 'dark' ? 'bg-slate-900/40 border-white/5' : 'bg-white/80 border-slate-200';
+  const textThemeClass = theme === 'dark' ? 'text-slate-100' : 'text-slate-900';
+  const btnThemeClass = theme === 'dark' ? 'bg-slate-800 border-white/5' : 'bg-slate-100 border-slate-200 hover:bg-slate-200';
+
   return (
-    <div ref={containerRef} className="flex flex-col h-screen bg-[#020617] text-slate-100 overflow-hidden font-sans">
-      <nav className="flex items-center justify-between px-4 md:px-6 py-4 bg-slate-900 border-b border-white/5 z-50 shadow-xl">
+    <div ref={containerRef} className={`flex flex-col h-screen ${theme === 'dark' ? 'bg-[#020617]' : 'bg-slate-50'} ${textThemeClass} overflow-hidden font-sans transition-colors duration-300`}>
+      <nav className={`flex items-center justify-between px-4 md:px-6 py-4 border-b z-50 shadow-xl ${navThemeClass}`}>
         <div className="flex items-center gap-2 md:gap-3">
-          <div className="p-1.5 md:p-2 bg-blue-600 rounded-lg shadow-blue-500/20"><Zap className="w-4 h-4 md:w-5 md:h-5" /></div>
-          <h1 className="text-sm md:text-lg font-black uppercase tracking-tighter">Optics<span className="text-blue-500">Master</span></h1>
+          <div className="p-1.5 md:p-2 bg-blue-600 rounded-lg shadow-blue-500/20"><Zap className="w-4 h-4 md:w-5 md:h-5 text-white" /></div>
+          <h1 className={`text-sm md:text-lg font-black uppercase tracking-tighter ${textThemeClass}`}>Optics<span className="text-blue-500">Master</span></h1>
         </div>
         <div className="flex gap-2">
-            <button onClick={toggleFullScreen} className="p-2 bg-slate-800 rounded-lg border border-white/5 hover:bg-slate-700 transition-colors" title="Full Screen">
-              <Maximize2 className="w-4 h-4" />
+            <button 
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} 
+              className={`p-2 rounded-lg border transition-colors ${btnThemeClass}`}
+              title="Toggle Theme"
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-blue-600" />}
             </button>
-            <div className="flex bg-slate-800 p-0.5 md:p-1 rounded-xl border border-white/5">
-                <button onClick={() => setMirrorType('concave')} className={`px-2 md:px-4 py-1 text-[9px] md:text-[10px] font-black rounded-lg transition-all ${mirrorType === 'concave' ? 'bg-blue-600' : 'text-slate-500'}`}>CONCAVE</button>
-                <button onClick={() => setMirrorType('convex')} className={`px-2 md:px-4 py-1 text-[9px] md:text-[10px] font-black rounded-lg transition-all ${mirrorType === 'convex' ? 'bg-blue-600' : 'text-slate-500'}`}>CONVEX</button>
+            <button onClick={toggleFullScreen} className={`p-2 rounded-lg border transition-colors ${btnThemeClass}`} title="Full Screen">
+              <Maximize2 className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`} />
+            </button>
+            <div className={`flex p-0.5 md:p-1 rounded-xl border ${theme === 'dark' ? 'bg-slate-800 border-white/5' : 'bg-slate-100 border-slate-200'}`}>
+                <button onClick={() => setMirrorType('concave')} className={`px-2 md:px-4 py-1 text-[9px] md:text-[10px] font-black rounded-lg transition-all ${mirrorType === 'concave' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500'}`}>CONCAVE</button>
+                <button onClick={() => setMirrorType('convex')} className={`px-2 md:px-4 py-1 text-[9px] md:text-[10px] font-black rounded-lg transition-all ${mirrorType === 'convex' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500'}`}>CONVEX</button>
             </div>
-            <button onClick={() => {setZoom(1.0); setPanOffset({x:0, y:0});}} className="p-2 bg-slate-800 rounded-lg border border-white/5"><Maximize className="w-4 h-4" /></button>
+            <button onClick={() => {setZoom(1.0); setPanOffset({x:0, y:0});}} className={`p-2 rounded-lg border transition-colors ${btnThemeClass}`}><Maximize className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`} /></button>
         </div>
       </nav>
 
       <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
-        <aside className="w-full md:w-80 bg-slate-900/40 backdrop-blur-md border-b md:border-b-0 md:border-r border-white/5 flex flex-col p-4 md:p-6 space-y-4 md:space-y-6 z-40 overflow-y-auto">
+        <aside className={`w-full md:w-80 backdrop-blur-md border-b md:border-b-0 md:border-r flex flex-col p-4 md:p-6 space-y-4 md:space-y-6 z-40 overflow-y-auto transition-colors duration-300 ${sidebarThemeClass}`}>
           <section className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-1 gap-4 md:gap-6">
-            <SliderWithInput label="Distance (u)" val={u_cm} min={5} max={180} unit="cm" onChange={setU} color="blue" />
-            <SliderWithInput label="Focal (f)" val={f_cm} min={10} max={80} unit="cm" onChange={setF} color="amber" />
-            <SliderWithInput label="Height" val={objHeight_cm} min={5} max={50} unit="cm" onChange={setObjHeight} color="red" />
+            <SliderWithInput theme={theme} label="Distance (u)" val={u_cm} min={5} max={180} unit="cm" onChange={setU} color="blue" />
+            <SliderWithInput theme={theme} label="Focal (f)" val={f_cm} min={10} max={80} unit="cm" onChange={setF} color="amber" />
+            <SliderWithInput theme={theme} label="Height" val={objHeight_cm} min={5} max={50} unit="cm" onChange={setObjHeight} color="red" />
           </section>
 
           <section className="hidden md:block">
-            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Ray Visibility</h3>
+            <h3 className={`text-[10px] font-black uppercase tracking-widest mb-4 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Ray Visibility</h3>
             <div className="grid grid-cols-2 gap-2">
-              <ToggleButton label="Parallel" active={visibleRays.parallel} color="#22c55e" onClick={() => setVisibleRays(v => ({...v, parallel: !v.parallel}))} />
-              <ToggleButton label="Focal" active={visibleRays.focal} color="#3b82f6" onClick={() => setVisibleRays(v => ({...v, focal: !v.focal}))} />
-              <ToggleButton label="Center" active={visibleRays.center} color="#f97316" onClick={() => setVisibleRays(v => ({...v, center: !v.center}))} />
-              <ToggleButton label="Pole" active={visibleRays.pole} color="#ec4899" onClick={() => setVisibleRays(v => ({...v, pole: !v.pole}))} />
+              <ToggleButton theme={theme} label="Parallel" active={visibleRays.parallel} color="#22c55e" onClick={() => setVisibleRays(v => ({...v, parallel: !v.parallel}))} />
+              <ToggleButton theme={theme} label="Focal" active={visibleRays.focal} color="#3b82f6" onClick={() => setVisibleRays(v => ({...v, focal: !v.focal}))} />
+              <ToggleButton theme={theme} label="Center" active={visibleRays.center} color="#f97316" onClick={() => setVisibleRays(v => ({...v, center: !v.center}))} />
+              <ToggleButton theme={theme} label="Pole" active={visibleRays.pole} color="#ec4899" onClick={() => setVisibleRays(v => ({...v, pole: !v.pole}))} />
             </div>
           </section>
 
-          <section className="p-3 md:p-5 bg-slate-900/80 rounded-2xl border border-white/10 mt-auto shadow-inner">
+          <section className={`p-3 md:p-5 rounded-2xl border mt-auto shadow-inner transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-900/80 border-white/10' : 'bg-slate-100 border-slate-200'}`}>
             <div className="flex justify-between items-center text-[10px] md:text-xs mb-1">
-              <span className="text-slate-500 uppercase font-black">Image Position</span>
+              <span className={`uppercase font-black ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Image Position</span>
               <span className="font-mono font-bold text-blue-400">{Math.abs(physics.v).toFixed(1)} cm</span>
             </div>
-            <p className="text-[10px] md:text-xs font-bold text-white italic truncate">"{physics.nature}"</p>
+            <p className={`text-[10px] md:text-xs font-bold italic truncate ${theme === 'dark' ? 'text-white' : 'text-slate-700'}`}>"{physics.nature}"</p>
           </section>
         </aside>
 
-        <main className="flex-1 relative bg-slate-950 touch-none overflow-hidden">
+        <main className="flex-1 relative touch-none overflow-hidden transition-colors duration-300" style={{ backgroundColor: colors.bg }}>
           <canvas 
             ref={canvasRef} 
             onWheel={handleWheel} 
@@ -410,33 +422,38 @@ const App = () => {
             onPointerCancel={handlePointerUp}
             className={`w-full h-full ${isDraggingObject ? 'cursor-grabbing' : 'cursor-crosshair'}`} 
           />
-          
-          
         </main>
       </div>
     </div>
   );
 };
 
-const ToggleButton = ({ label, active, onClick, color }) => (
-  <button onClick={onClick} className={`flex items-center justify-between px-3 py-2 rounded-lg border transition-all text-[9px] font-bold ${active ? 'bg-slate-800 border-white/20 text-white' : 'bg-slate-900/50 border-white/5 text-slate-600'}`}>
-    <div className="flex items-center gap-2">
-      <div className="w-2 h-2 rounded-full" style={{backgroundColor: active ? color : '#334155'}} />
-      {label}
-    </div>
-    {active ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-  </button>
-);
+const ToggleButton = ({ label, active, onClick, color, theme }) => {
+  const activeClass = theme === 'dark' ? 'bg-slate-800 border-white/20 text-white' : 'bg-blue-50 border-blue-200 text-blue-700';
+  const inactiveClass = theme === 'dark' ? 'bg-slate-900/50 border-white/5 text-slate-600' : 'bg-slate-50 border-slate-200 text-slate-400';
 
-const SliderWithInput = ({ label, val, min, max, unit, onChange, color }) => {
+  return (
+    <button onClick={onClick} className={`flex items-center justify-between px-3 py-2 rounded-lg border transition-all text-[9px] font-bold ${active ? activeClass : inactiveClass}`}>
+      <div className="flex items-center gap-2">
+        <div className="w-2 h-2 rounded-full" style={{backgroundColor: active ? color : (theme === 'dark' ? '#334155' : '#cbd5e1')}} />
+        {label}
+      </div>
+      {active ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+    </button>
+  );
+};
+
+const SliderWithInput = ({ label, val, min, max, unit, onChange, color, theme }) => {
   const accentColors = { blue: 'accent-blue-500', amber: 'accent-amber-500', red: 'accent-red-500' };
   const borderColors = { blue: 'border-blue-500/30', amber: 'border-amber-500/30', red: 'border-red-500/30' };
+  const inputBg = theme === 'dark' ? 'bg-slate-800' : 'bg-white';
+  const labelColor = theme === 'dark' ? 'text-slate-500' : 'text-slate-400';
 
   return (
     <div className="space-y-1 md:space-y-3">
       <div className="flex justify-between items-center text-[8px] md:text-[10px] font-black uppercase mb-1">
-        <span className="text-slate-500">{label}</span>
-        <div className={`flex items-center bg-slate-800 border ${borderColors[color]} rounded px-1.5 py-0.5`}>
+        <span className={labelColor}>{label}</span>
+        <div className={`flex items-center border ${borderColors[color]} rounded px-1.5 py-0.5 ${inputBg}`}>
           <input 
             type="number" 
             value={val} 
@@ -444,9 +461,9 @@ const SliderWithInput = ({ label, val, min, max, unit, onChange, color }) => {
               const num = parseFloat(e.target.value);
               if (!isNaN(num)) onChange(num);
             }}
-            className="w-8 md:w-10 bg-transparent text-white font-mono text-center outline-none"
+            className={`w-8 md:w-10 bg-transparent font-mono text-center outline-none ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}
           />
-          <span className="text-slate-500 ml-0.5">{unit}</span>
+          <span className={`${labelColor} ml-0.5`}>{unit}</span>
         </div>
       </div>
       <input 
@@ -456,7 +473,7 @@ const SliderWithInput = ({ label, val, min, max, unit, onChange, color }) => {
         step="0.5"
         value={val} 
         onChange={(e) => onChange(Number(e.target.value))} 
-        className={`w-full h-1 md:h-1.5 bg-slate-800 rounded-full appearance-none cursor-pointer ${accentColors[color]}`} 
+        className={`w-full h-1 md:h-1.5 rounded-full appearance-none cursor-pointer transition-all ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-200'} ${accentColors[color]}`} 
       />
     </div>
   );
